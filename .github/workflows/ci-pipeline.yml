@@ -1,0 +1,129 @@
+name: CI-CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+env:
+  REGISTRY: ghcr.io
+  GITHUB_USER: aakash6060
+  BACKEND_IMAGE_NAME: backend
+  TRANSACTIONS_IMAGE_NAME: transactions
+  STUDENT_IMAGE_NAME: studentportfolio
+  IMAGE_TAG: ${{ github.sha }}
+
+# -------------------------
+# 1) TEST BACKEND SERVICE
+# -------------------------
+jobs:
+  test-backend:
+    runs-on: ubuntu-latest
+
+    services:
+      mongo:
+        image: mongo:latest
+        ports:
+          - 27017:27017
+        env:
+          MONGO_INITDB_ROOT_USERNAME: root
+          MONGO_INITDB_ROOT_PASSWORD: example
+        options: >-
+          --health-cmd "mongosh --eval 'db.runCommand(\"ping\").ok'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run backend tests
+        working-directory: backend
+        env:
+          MONGO_URI: "mongodb://root:example@localhost:27017/test_db?authSource=admin"
+          FLASK_ENV: testing
+        run: pytest -q
+
+
+# -------------------------
+# 2) BUILD AND DEPLOY (CI+CD)
+# -------------------------
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    needs: test-backend
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ---------------------
+      # BUILD + PUSH IMAGES
+      # ---------------------
+      - name: Log in to GHCR
+        env:
+          CR_PAT: ${{ secrets.CR_PAT }}
+        run: echo "$CR_PAT" | docker login ghcr.io -u "${{ env.GITHUB_USER }}" --password-stdin
+
+      - name: Build & push backend image
+        run: |
+          docker build -t $REGISTRY/$GITHUB_USER/$BACKEND_IMAGE_NAME:$IMAGE_TAG backend
+          docker push  $REGISTRY/$GITHUB_USER/$BACKEND_IMAGE_NAME:$IMAGE_TAG
+
+      - name: Build & push transactions image
+        run: |
+          docker build -t $REGISTRY/$GITHUB_USER/$TRANSACTIONS_IMAGE_NAME:$IMAGE_TAG transactions
+          docker push  $REGISTRY/$GITHUB_USER/$TRANSACTIONS_IMAGE_NAME:$IMAGE_TAG
+
+      - name: Build & push studentportfolio image
+        run: |
+          docker build -t $REGISTRY/$GITHUB_USER/$STUDENT_IMAGE_NAME:$IMAGE_TAG studentportfolio
+          docker push  $REGISTRY/$GITHUB_USER/$STUDENT_IMAGE_NAME:$IMAGE_TAG
+
+      # ---------------------
+      # UPDATE GITOPS REPO
+      # ---------------------
+      - name: Clone GitOps repo
+        env:
+          GITOPS_PAT: ${{ secrets.GITOPS_PAT }}
+          GITOPS_REPO: ${{ secrets.GITOPS_REPO }}
+        run: |
+          git config --global user.email "ci-bot@example.com"
+          git config --global user.name "ci-bot"
+          git clone https://x-access-token:${GITOPS_PAT}@github.com/${GITOPS_REPO}.git gitops
+
+      - name: Update K8s image tags in GitOps repo
+        working-directory: gitops/k8s
+        run: |
+          sed -i "s|image: ghcr.io/.*/backend:.*|image: ghcr.io/${GITHUB_USER}/backend:${IMAGE_TAG}|" backend-deployment.yaml
+          sed -i "s|image: ghcr.io/.*/transactions:.*|image: ghcr.io/${GITHUB_USER}/transactions:${IMAGE_TAG}|" transactions-deployment.yaml
+          sed -i "s|image: ghcr.io/.*/studentportfolio:.*|image: ghcr.io/${GITHUB_USER}/studentportfolio:${IMAGE_TAG}|" studentportfolio-deployment.yaml
+
+      - name: Commit & push GitOps changes
+        working-directory: gitops
+        run: |
+          if git diff --quiet; then
+            echo "No manifest changes detected."
+          else
+            git add .
+            git commit -m "Update images to tag ${IMAGE_TAG}"
+            git push origin main
+          fi
