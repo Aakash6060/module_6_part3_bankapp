@@ -99,7 +99,31 @@ jobs:
           docker push  $REGISTRY/$GITHUB_USER/$STUDENT_IMAGE_NAME:$IMAGE_TAG
 
       # ---------------------
-      # UPDATE GITOPS REPO
+      # DEBUG SECRETS
+      # ---------------------
+      - name: DEBUG — Show GitOps secret info safely
+        env:
+          GITOPS_PAT: ${{ secrets.GITOPS_PAT }}
+          GITOPS_REPO: ${{ secrets.GITOPS_REPO }}
+        run: |
+          echo "==== DEBUG: Secrets Loaded ===="
+          echo "GITOPS_REPO = [${GITOPS_REPO}]"
+          echo "GITOPS_REPO length = ${#GITOPS_REPO}"
+
+          echo "GITOPS_PAT length = ${#GITOPS_PAT}"
+          echo "==============================="
+
+      - name: DEBUG — Show git clone URL structure
+        env:
+          GITOPS_PAT: ${{ secrets.GITOPS_PAT }}
+          GITOPS_REPO: ${{ secrets.GITOPS_REPO }}
+        run: |
+          echo "==== DEBUG: Clone URL Preview ===="
+          echo "URL: https://x-access-token:<TOKEN>@github.com/${GITOPS_REPO}.git gitops"
+          echo "=================================="
+
+      # ---------------------
+      # CLONE GITOPS REPO
       # ---------------------
       - name: Clone GitOps repo
         env:
@@ -108,22 +132,6 @@ jobs:
         run: |
           git config --global user.email "ci-bot@example.com"
           git config --global user.name "ci-bot"
+
+          echo "Cloning GitOps repository..."
           git clone https://x-access-token:${GITOPS_PAT}@github.com/${GITOPS_REPO}.git gitops
-
-      - name: Update K8s image tags in GitOps repo
-        working-directory: gitops/k8s
-        run: |
-          sed -i "s|image: ghcr.io/.*/backend:.*|image: ghcr.io/${GITHUB_USER}/backend:${IMAGE_TAG}|" backend-deployment.yaml
-          sed -i "s|image: ghcr.io/.*/transactions:.*|image: ghcr.io/${GITHUB_USER}/transactions:${IMAGE_TAG}|" transactions-deployment.yaml
-          sed -i "s|image: ghcr.io/.*/studentportfolio:.*|image: ghcr.io/${GITHUB_USER}/studentportfolio:${IMAGE_TAG}|" studentportfolio-deployment.yaml
-
-      - name: Commit & push GitOps changes
-        working-directory: gitops
-        run: |
-          if git diff --quiet; then
-            echo "No manifest changes detected."
-          else
-            git add .
-            git commit -m "Update images to tag ${IMAGE_TAG}"
-            git push origin main
-          fi
