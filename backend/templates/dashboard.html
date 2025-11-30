@@ -3,11 +3,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Pixel River Financial Services Dashboard</title>
+  <title>Pixel River Financial Bank Application</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css">
 </head>
 <body class="container mt-5">
-  <h1>Welcome, {{ user.first_name }} {{ user.last_name }}, to Pixel River Financial Services, Your Montly transaction Report Available as well</h1>
+  <h1>Pixel River Financial Bank Application - Welcome, {{ user.first_name }} {{ user.last_name }}</h1>
   <p>Account Balance: ${{ '%.2f'|format(user.balance) }}</p>
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
@@ -47,7 +47,7 @@
     const list = document.getElementById('transactionsList');
     list.innerHTML = '';  // clear prior
     try {
-      const res = await fetch('/api/transactions');
+      const res = await fetch('/api/transactions/{{ user._id }}');
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
   

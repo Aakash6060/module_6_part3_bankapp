@@ -1,3 +1,8 @@
+Student Name: Aakash
+Student Number: 0405969
+Course: COMP-4001 Cloud Computing
+Assignment: Module 6 - Full CI/CD + GitOps Banking Microservices Application
+
 # Project Overview
 The Student Portfolio Microservice aims to provide a platform where students can showcase their projects, skills, and academic achievements. It's built with scalability and modularity in mind, allowing for independent development and deployment of the frontend and backend components.
 
